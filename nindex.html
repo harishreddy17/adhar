@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aadhaar QR Code Scanner</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+  <script src="https://unpkg.com/jsqr/dist/jsQR.js"></script>
+  <style>
+    #video {
+      width: 100%;
+      max-width: 640px;
+      height: auto;
+      border: 1px solid #ccc;
+    }
+    #canvas {
+      display: none;
+    }
+    #output {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Aadhaar QR Code Scanner</h1>
+  
+  <video id="video" width="640" height="480" autoplay></video>
+  <canvas id="canvas" style="display: none;"></canvas>
+  
+  <div id="output">
+    <h3>Extracted Details:</h3>
+    <p><strong>Name:</strong> <span id="name"></span></p>
+    <p><strong>Aadhaar Number:</strong> <span id="aadhaarNumber"></span></p>
+    <p><strong>Date of Birth:</strong> <span id="dob"></span></p>
+    <p><strong>Raw Data:</strong> <pre id="rawData"></pre></p>
+  </div>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+
+    // Start webcam video
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(stream => {
+        video.srcObject = stream;
+        video.setAttribute("playsinline", true);
+        video.play();
+        video.onloadedmetadata = () => {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+        };
+      })
+      .catch(err => {
+        console.error('Error accessing webcam:', err);
+        alert('Please allow webcam access to scan the QR code.');
+      });
+
+    video.addEventListener('play', function () {
+      const scanQRCode = () => {
+        if (video.paused || video.ended) return;
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, canvas.width, canvas.height);
+        
+        if (code) {
+          console.log("QR Code Detected:", code.data);
+          document.getElementById("rawData").textContent = code.data;  // Display raw data for debugging
+          parseAadhaarQRData(code.data);
+        } else {
+          console.log("No QR code detected. Retrying...");
+          requestAnimationFrame(scanQRCode);
+        }
+      };
+      scanQRCode();
+    });
+
+    function parseAadhaarQRData(qrData) {
+      console.log("Raw QR Data (Length):", qrData.length);
+    
+      // Log the raw data
+      document.getElementById("rawData").textContent = qrData;
+    
+      try {
+        // Try decoding as Base64
+        if (isBase64(qrData)) {
+          const decodedData = atob(qrData);
+          console.log("Base64 Decoded Data:", decodedData);
+          parseXmlData(decodedData);
+          return;
+        }
+    
+        // Attempt GZIP decompression
+        try {
+          const uint8Array = new Uint8Array(qrData.split('').map(char => char.charCodeAt(0)));
+          const decompressed = pako.inflate(uint8Array, { to: 'string' });
+          console.log("Decompressed Data:", decompressed);
+          parseXmlData(decompressed);
+          return;
+        } catch (gzipError) {
+          console.warn("GZIP decompression failed:", gzipError);
+        }
+    
+        // If no other decoding works, log the raw data and alert
+        alert("Unable to decode QR data. Additional tools may be required.");
+      } catch (error) {
+        console.error("Error processing QR data:", error);
+        alert("An error occurred while processing the QR code data.");
+      }
+    }
+    
+
+    function parseXmlData(data) {
+      try {
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(data, "text/xml");
+        console.log("Parsed XML Document:", xmlDoc);
+
+        const name = xmlDoc.getElementsByTagName("name")[0]?.textContent || "Name not found";
+        const aadhaarNumber = xmlDoc.getElementsByTagName("uid")[0]?.textContent || "Aadhaar Number not found";
+        const dob = xmlDoc.getElementsByTagName("dob")[0]?.textContent || "Date of Birth not found";
+
+        displayDetails(name, aadhaarNumber, dob);
+      } catch (error) {
+        console.error("Error parsing XML Data:", error);
+        alert("Failed to parse XML data.");
+      }
+    }
+
+    function displayDetails(name, aadhaarNumber, dob) {
+      document.getElementById("name").textContent = name;
+      document.getElementById("aadhaarNumber").textContent = aadhaarNumber;
+      document.getElementById("dob").textContent = dob;
+    }
+
+    // Utility function to check if data is Base64-encoded
+    function isBase64(data) {
+      try {
+        return btoa(atob(data)) === data;
+      } catch (error) {
+        return false;
+      }
+    }
+
+    // Utility function to check if data is JSON
+    function isJson(data) {
+      try {
+        JSON.parse(data);
+        return true;
+      } catch (error) {
+        return false;
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aadhaar QR Code Scanner</title>
+  <script type="module" src="https://unpkg.com/qr-scanner/qr-scanner.min.js"></script>
+  <style>
+    #video {
+      width: 640px;
+      height: 480px;
+      border: 1px solid #ccc;
+    }
+    #output {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Aadhaar QR Code Scanner</h1>
+
+  <video id="video" autoplay></video>
+
+  <div id="output">
+    <h3>Extracted Details:</h3>
+    <p><strong>Name:</strong> <span id="name"></span></p>
+    <p><strong>Aadhaar Number:</strong> <span id="aadhaarNumber"></span></p>
+    <p><strong>Date of Birth:</strong> <span id="dob"></span></p>
+  </div>
+
+  <script type="module">
+    import QrScanner from 'https://unpkg.com/qr-scanner/qr-scanner.min.js';
+
+    const video = document.getElementById('video');
+    const nameField = document.getElementById('name');
+    const aadhaarNumberField = document.getElementById('aadhaarNumber');
+    const dobField = document.getElementById('dob');
+
+    // Initialize QR scanner
+    const qrScanner = new QrScanner(
+      video,
+      (result) => {
+        console.log("[INFO] QR Code detected:", result.data);
+
+        // Log full data for debugging
+        console.log("[INFO] Full QR Code Data:", result.data);
+
+        // Check if the data is likely XML
+        if (result.data.startsWith("<")) {
+          console.log("[INFO] Detected XML format. Parsing...");
+          parseAadhaarXML(result.data);
+        } else {
+          console.log("[INFO] Detected non-XML format. Raw Data:", result.data);
+          alert("The QR code contains non-XML data. Decoding Aadhaar QR codes requires specialized libraries.");
+        }
+      },
+      {
+        onDecodeError: (error) => {
+          console.warn("[WARN] QR code decoding failed:", error);
+        },
+        highlightScanRegion: true, // Optional: Highlight scan region
+        maxScansPerSecond: 10      // Adjust scan rate
+      }
+    );
+
+    // Start the scanner
+    qrScanner.start()
+      .then(() => {
+        console.log("[INFO] QR scanner started successfully.");
+      })
+      .catch((err) => {
+        console.error("[ERROR] Error starting QR scanner:", err);
+      });
+
+    // Debugging video metadata and playback
+    video.addEventListener('loadedmetadata', () => {
+      console.log("[INFO] Video feed metadata loaded.");
+      console.log("Video dimensions:", video.videoWidth, video.videoHeight);
+    });
+
+    video.addEventListener('play', () => {
+      console.log("[INFO] Video feed is playing.");
+    });
+
+    // Parse Aadhaar XML data
+    function parseAadhaarXML(qrData) {
+      try {
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(qrData, "text/xml");
+
+        // Extract Aadhaar fields
+        const name = xmlDoc.getElementsByTagName("name")[0]?.textContent || "Not available";
+        const aadhaarNumber = xmlDoc.getElementsByTagName("uid")[0]?.textContent || "Not available";
+        const dob = xmlDoc.getElementsByTagName("dob")[0]?.textContent || "Not available";
+
+        console.log("[INFO] Extracted Details:");
+        console.log("Name:", name);
+        console.log("Aadhaar Number:", aadhaarNumber);
+        console.log("Date of Birth:", dob);
+
+        // Display the extracted details
+        nameField.textContent = name;
+        aadhaarNumberField.textContent = aadhaarNumber;
+        dobField.textContent = dob;
+      } catch (error) {
+        console.error("[ERROR] Failed to parse Aadhaar XML data:", error);
+        alert("Failed to parse Aadhaar XML data.");
+      }
+    }
+  </script>
+</body>
+</html>
